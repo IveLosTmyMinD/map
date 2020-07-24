@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>GIS-Service</title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" type="text/css" href="./libs/leaflet.css">
+    <link rel="stylesheet" type="text/css" href="./libs/leaflet-measure.css">
+    <link rel="stylesheet" type="text/css" href="./css/style.css">
+
+    <script src="./libs/leaflet.js"></script>
+    <script src="./libs/leaflet-measure.js"></script>
+    <script src="http://api-maps.yandex.ru/2.1/?lang=ru-RU" type="text/javascript"></script>
+    <script src="./libs/Yandex.js"></script>
+    <!-- <script src="./libs/script.js"></script> -->
+
+</head>
+
+<body>
+    <div id="map"></div>
+    <script src="./data/buildings.shp.js"></script>
+    <script src="./data/roads.shp.js"></script>
+    <script src="./data/busstops.shp.js"></script>
+    <script src="./data/forest.js"></script>
+    <script>
+        let bmURL = 'https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw',
+            bm = L.tileLayer(bmURL, {
+                id: 'mapbox/streets-v11'
+            });
+
+        let OSM = L.tileLayer('https://b.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: 'OSM'
+            }),
+            WMmap = L.tileLayer('https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png', {
+                attribution: 'Wikimedia map'
+            });
+
+        let gsat = L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+        });
+
+        let ukrcad = L.tileLayer.wms("http://map.land.gov.ua/geowebcache/service/wms", {
+            format: 'image/png',
+            transparent: true,
+            layers: 'kadastr'
+        });
+
+        let ya = new L.Yandex();
+
+        function traffic() {
+            var actualProvider = new ymaps.traffic.provider.Actual({}, {
+                infoLayerShow: true
+            });
+            actualProvider.setMap(this._yandex);
+        }
+
+        let yatr = new L.Yandex('overlay')
+            .on('load', traffic);
+
+        let Aicn = L.Icon.extend({
+            options: {
+                iconSize: [32,32],
+                iconAnchor: [16,32],
+                popupAnchor: [0,-20]
+            }
+        });
+
+        let AicnReg = [new Aicn({iconUrl: './data/bus.png'})];
+
+        let buildingsLayer = L.geoJSON(buildings, {
+            style: function (feature) {
+                var c = '#08800a',
+                    fc = '#0f300f';
+                if (feature.properties.living == 0) {
+                    c = '#99082a';
+                    fc = '#ff033e';
+                }
+                return {
+                    color: c,
+                    fillColor: fc,
+                    fillOpacity: 0.4
+                }
+            }
+        })
+            .bindPopup(function (buildings) {
+                return `<b>Материал: </b>${buildings.feature.properties.material}<br>Этажность: </br>${buildings.feature.properties.height}`
+
+            });
+
+
+        let roadsLayer = L.geoJSON(roads, {style: function(feature){
+            var c = '#949494';                
+            if (feature.properties.auto == 1){
+                c = '#800808';
+            }
+            return {
+                color: c
+            }
+        }}).bindPopup(function(roads){
+                return `<b>Название: </b>${roads.feature.properties.name}<br>Пешеходная?: </br>${roads.feature.properties.auto}`
+
+            });;
+        let busstopsLayer = L.geoJSON(busstops, {pointToLayer: function(feature, latlng){
+            return L.marker(latlng, {icon: AicnReg[0]})
+            }
+        }).bindPopup(function(busstops){
+                return `<b>Магазин: </b>${busstops.feature.properties.shop}<br>Маршруты: </br>${busstops.feature.properties.routenumb}`
+
+            });;
+
+        let forestLayer = L.geoJSON(forest, {style: function(feature){
+                let c = '#949494';
+                if (feature.properties.Material == "Грунт"){
+                    c = '#805008';
+                }
+                return {
+                    color: c
+                }
+            }}).bindPopup(function (forest) {
+            return `Тип маршрута: ${forest.feature.properties.RouteType}
+            <br>Материал покрытия: </br>${forest.feature.properties.Material}`
+        })
+
+        let baselayers = {
+            "OpenStreetMap": OSM,
+            "Wikimapia": WMmap,
+            "Googel": gsat,
+            "Тындекс": ya
+        };
+
+        let overlayLayers = {
+            "Тындекс - пробки": yatr,
+            "Укродастр": ukrcad,
+            "Здания": buildingsLayer,
+            "Автобусные остановки":busstopsLayer,
+            "Дороги":roadsLayer,
+            "Лес":forestLayer
+        };
+
+
+
+        let measureControl = new L.Control.Measure({
+            primaryLengthUnit: 'meters',
+            secondaryLengthUnit: 'kilometers',
+            primaryAreaUnit: 'sqmeters',
+            secondaryAreaUnit: 'hectares',
+            activeColor: '#ad3232',
+            completedColor: '#fc0303',
+            decPoint: ',',
+            thousandsSep: ' '
+        });
+
+        let mymap = L.map('map', {
+            center: [55.804077, 38.433519],
+            zoom: 15,
+            layers: [OSM],
+        });
+
+        L.marker([55.757578, 37.661113], {}).bindPopup('<b>Курская</b>').addTo(mymap);
+        L.marker([55.776867, 37.657330], {}).bindPopup('Ярославская').addTo(mymap);
+        L.marker([55.788397, 37.749324], {}).bindPopup('Партизанская').addTo(mymap);
+
+        L.control.layers(baselayers, overlayLayers).addTo(mymap);
+        L.control.scale({
+            imperial: false,
+            maxWidth: 200
+        }).addTo(mymap);
+
+        measureControl.addTo(mymap);
+    </script>
+</body>
+
+</html>
